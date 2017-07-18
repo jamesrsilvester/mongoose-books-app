@@ -9,9 +9,8 @@
 //require express in our app
 var express = require('express'),
   bodyParser = require('body-parser');
-
-// connect to db models
-var db = require('./models');
+  // NOTE: Required db so server can access all models. Index will show by default.
+  db = require('./models');
 
 // generate a new express app and call it 'app'
 var app = express();
@@ -21,6 +20,12 @@ app.use(express.static('public'));
 
 // body parser config to accept our datatypes
 app.use(bodyParser.urlencoded({ extended: true }));
+
+
+
+////////////////////
+//  DATA
+///////////////////
 
 
 
@@ -39,29 +44,59 @@ app.get('/', function (req, res) {
 
 // get all books
 app.get('/api/books', function (req, res) {
-  // send all books as JSON response
-  db.Book.find(function(err, books){
-    if (err) { return console.log("index error: " + err); }
+  // get all books (all b/c find parameters empty) respond as JSON
+  db.Book.find()
+  .populate('author')
+  .exec(function(err,books){
+    if (err) {
+      console.log("index.error: " + err);
+      res.sendStatus(500);
+    }
     res.json(books);
   });
+
 });
 
-// get one book
+// get one book by ID from URL
 app.get('/api/books/:id', function (req, res) {
-  db.Book.findOne({_id: req.params.id }, function(err, data) {
-    res.json(data);
+// save book ID from URL
+  let bookID = req.params.id;
+    //check DB for book by bookID
+  db.Book.findById(bookID, function(err,books){
+    if (err) {
+      console.log("index.error: " + err);
+      res.sendStatus(500);
+    }
+    res.json(books);
   });
 });
 
 // create new book
 app.post('/api/books', function (req, res) {
   // create new book with form data (`req.body`)
-  console.log('books create', req.body);
-  var newBook = new db.Book(req.body);
-  newBook.save(function handleDBBookSaved(err, savedBook) {
-    res.json(savedBook);
+  var newBook = new db.Book({
+    title: req.body.title,
+    image: req.body.image,
+    releaseDate: req.body.releaseDate,
   });
+
+  // this code will only add an author to a book if the author already exists
+  // NOTE: take name of author from form
+  db.Author.findOne({name: req.body.author}, function(err, author){
+    // NOTE: save author as author of newbook
+    newBook.author = author;
+    // add newBook to database
+    newBook.save(function(err, book){
+      if (err) {
+        return console.log("create error: " + err);
+      }
+      console.log("created ", book.title);
+      res.json(book);
+    });
+  });
+
 });
+
 
 
 // delete book
@@ -70,15 +105,13 @@ app.delete('/api/books/:id', function (req, res) {
   console.log('books delete', req.params);
   var bookId = req.params.id;
   // find the index of the book we want to remove
-  db.Book.findOneAndRemove({ _id: bookId }, function (err, deletedBook) {
-    res.json(deletedBook);
+  db.Book.findOneAndRemove({ _id:bookId }, function (err, deletedBook)
+  {res.json(deletedBook);
   });
 });
 
 
 
-
-
 app.listen(process.env.PORT || 3000, function () {
-  console.log('Example app listening at http://localhost:3000/');
+  console.log('Book app listening at http://localhost:3000/');
 });
